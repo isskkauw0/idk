@@ -1,0 +1,45 @@
+name: build
+on:
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      matrix:
+        preset: [weak, medium, strong]
+        shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get install -y lua5.1 && unzip -q bundle.zip && python3 gen.py && python3 shard.py ${{ matrix.preset }} ${{ matrix.shard }} 10
+      - uses: actions/upload-artifact@v4
+        with:
+          name: out-${{ matrix.preset }}-${{ matrix.shard }}
+          path: |
+            out
+            fail-*.txt
+  merge:
+    needs: build
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: out-*
+          merge-multiple: true
+          path: merged
+      - run: |
+          mkdir luau-corpus-promeheus
+          mv merged/out/* luau-corpus-promeheus/
+          unzip -q bundle.zip 'source/*' -d luau-corpus-promeheus
+          cat merged/fail-*.txt > fail.txt
+          zip -qr -9 luau-corpus-promeheus.zip luau-corpus-promeheus
+      - uses: actions/upload-artifact@v4
+        with:
+          name: luau-corpus-promeheus
+          path: |
+            luau-corpus-promeheus.zip
+            fail.txt
+          compression-level: 0
